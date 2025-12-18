@@ -3,1132 +3,546 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Gesture Particle System</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #050505;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            user-select: none;
-        }
-
-        #canvas-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 15; /* Higher than camera-wrapper */
-            pointer-events: none;
-        }
-
-        /* COMPACT UI */
-        #ui-layer {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            z-index: 20;
-            color: #ff69b4; 
-            background: rgba(0, 0, 0, 0.6);
-            padding: 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 105, 180, 0.2);
-            font-size: 12px;
-            line-height: 1.4;
-            width: 210px;
-            backdrop-filter: blur(6px);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-            pointer-events: auto;
-            transition: height 0.3s ease;
-        }
-
-        #ui-layer.collapsed {
-            width: auto;
-            min-width: 120px;
-        }
-        
-        #ui-layer.collapsed #ui-content {
-            display: none;
-        }
-
-        .ui-header-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding-bottom: 4px;
-            margin-bottom: 8px;
-        }
-
-        #ui-layer h1 {
-            margin: 0;
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #fff;
-            pointer-events: none;
-        }
-
-        #btn-collapse {
-            background: none;
-            border: none;
-            color: #ff69b4;
-            font-weight: bold;
-            font-size: 16px;
-            cursor: pointer;
-            padding: 0 5px;
-            line-height: 1;
-        }
-        #btn-collapse:hover {
-            color: #fff;
-        }
-
-        .stat-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4px;
-            pointer-events: none;
-        }
-
-        .value {
-            font-weight: bold;
-            color: #fff;
-        }
-
-        /* Voice Toggle Button */
-        #btn-voice {
-            width: 100%;
-            margin-top: 5px;
-            margin-bottom: 8px;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 105, 180, 0.3);
-            border-radius: 6px;
-            color: #ddd;
-            cursor: pointer;
-            font-size: 11px;
-            text-transform: uppercase;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        #btn-voice:hover {
-            background: rgba(255, 105, 180, 0.2);
-            color: #fff;
-        }
-
-        #btn-voice.active {
-            background: rgba(0, 255, 255, 0.2); 
-            color: #0ff;
-            border-color: #0ff;
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
-        }
-
-        /* Draggable & Resizable Camera Wrapper */
-        #camera-wrapper {
-            position: absolute;
-            bottom: 15px;
-            right: 15px;
-            width: 200px;
-            height: 150px;
-            z-index: 18; /* Higher than canvas-container (15) */
-            background: rgba(0,0,0,0.5);
-            border: 1px solid #444;
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            resize: both; /* Enable resizing */
-            overflow: hidden; /* Required for resize handle */
-            min-width: 100px;
-            min-height: 80px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            pointer-events: auto;
-        }
-
-        #camera-handle {
-            background: rgba(255, 105, 180, 0.2);
-            color: #ccc;
-            font-size: 10px;
-            text-align: center;
-            cursor: grab;
-            padding: 2px 0;
-            user-select: none;
-            flex-shrink: 0;
-        }
-        #camera-handle:active {
-            cursor: grabbing;
-            background: rgba(255, 105, 180, 0.4);
-        }
-
-        #webcam-preview {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transform: scaleX(-1); 
-            opacity: 0.8;
-            pointer-events: none; /* Let events pass to wrapper for resize */
-        }
-
-        /* Fullscreen override for AR mode */
-        #camera-wrapper.fullscreen {
-            width: 100vw !important;
-            height: 100vh !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: auto !important;
-            bottom: auto !important;
-            border: none;
-            border-radius: 0;
-            resize: none;
-            background: black;
-            z-index: 1 !important; /* Move BEHIND canvas-container (15) in AR mode */
-            pointer-events: none; /* Let clicks pass through to canvas if needed */
-        }
-        
-        #camera-wrapper.fullscreen #camera-handle {
-            display: none;
-        }
-        
-        #camera-wrapper.fullscreen #webcam-preview {
-            opacity: 1.0;
-        }
-
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            z-index: 30;
-            font-size: 18px;
-            text-align: center;
-            background: rgba(0,0,0,0.8);
-            padding: 20px;
-            border-radius: 12px;
-            pointer-events: none;
-        }
-
-        #voice-indicator {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: #555;
-            transition: all 0.2s;
-        }
-        #voice-indicator.listening {
-            background-color: #00ff00;
-            box-shadow: 0 0 6px #00ff00;
-        }
-    </style>
-
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <title>Magic Christmas</title>
     
-    <!-- MediaPipe Hands -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
     <style>
-        /* Fix for GitHub Pages 404s */
+        body { margin: 0; overflow: hidden; background-color: #000000; font-family: 'Segoe UI', sans-serif; }
+        #canvas-container { width: 100%; height: 100vh; display: block; }
+        
+        /* UI Center Vandiep */
+        #ui-layer {
+            position: absolute; bottom: 30px; width: 100%;
+            text-align: center; pointer-events: none; z-index: 100;
+        }
+        
+        /* Guide text Vandiep */
+        .guide { 
+            color: rgba(255, 255, 255, 0.6); 
+            font-size: 13px; 
+            margin-bottom: 20px; 
+            text-shadow: 0 2px 4px black;
+        }
+
+        button {
+            pointer-events: auto; cursor: pointer;
+            background: linear-gradient(to bottom, #D32F2F, #8B0000); 
+            color: #FFF; border: 2px solid #FFD700;
+            padding: 15px 50px; border-radius: 30px; 
+            font-weight: 800; font-size: 16px;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.6);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+        /* Camera Preview Vandiep */
+        #camera-preview {
+            position: absolute; top: 15px; right: 15px;
+            width: 120px; height: 90px;
+            border: 2px solid rgba(255,0,0,0.5); 
+            transform: scaleX(-1); opacity: 0.6; border-radius: 8px;
+        }
+        
+        /* Vandiep */
+        #copyright {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+            z-index: 100;
+            font-family: sans-serif;
+            pointer-events: none;
+            font-style: italic;
+        }
+
+        #error-log { display: none; position: absolute; top: 0; left: 0; color: red; background: rgba(0,0,0,0.8); z-index: 999; padding: 10px; }
     </style>
 </head>
 <body>
-
-    <div id="loading">Starting System...<br><span style="font-size:14px; color:#aaa;">Allow Camera & Mic</span></div>
-
-    <div id="ui-layer">
-        <div class="ui-header-row">
-            <h1>Controls</h1>
-            <button id="btn-collapse">−</button>
-        </div>
-        
-        <div id="ui-content">
-            <button id="btn-voice">
-                <div id="voice-indicator"></div>
-                <span id="voice-btn-text">Enable Voice Mode</span>
-            </button>
-
-            <div class="stat-row">
-                <span>Gesture/Word:</span>
-                <span id="gesture-val" class="value">...</span>
-            </div>
-            <div class="stat-row">
-                <span>Fingers:</span>
-                <span id="finger-val" class="value">0</span>
-            </div>
-            
-            <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;">
-            <div style="font-size: 11px; color: #ddd; pointer-events: none;">
-                <b>Voice Mode ON:</b><br>
-                🎤 Say ANY word<br>
-                👋 Touch text to scatter<br>
-                <br>
-                <b>Voice Mode OFF:</b><br>
-                ☝️ 1: "I"<br>
-                ✌️ 2: "LOVE"<br>
-                🤟 3: "YOU"<br>
-                ✋ 4: "I LOVE YOU"<br>
-                ✊ Fist: Shrink
-            </div>
-        </div>
-    </div>
-
-    <!-- Camera Wrapper for Drag & Resize -->
-    <div id="camera-wrapper">
-        <div id="camera-handle">:: Drag to Move ::</div>
-        <video id="webcam-preview" playsinline></video>
-    </div>
+    <div id="error-log"></div>
     
+    <!-- UI Vandiep -->
+    <div id="ui-layer">
+        <!-- Vandiep -->
+        <div class="guide">
+            🖐 <b>Xòe tay:</b> Album &nbsp;|&nbsp; 🫶 <b>Trái tim:</b> Bất ngờ &nbsp;|&nbsp; ✊ <b>Nắm tay:</b> Cây thông
+        </div>
+        <button id="btnStart" onclick="startSystem()">Bấm vào đây i:></button>
+    </div>
+
+    <!-- Vandiep -->
+    <div id="copyright">© by zest</div>
+
     <div id="canvas-container"></div>
+    <video class="input_video" autoplay playsinline muted style="position:absolute; left:-9999px; width:1px; height:1px; opacity:0;"></video>
+    <canvas id="camera-preview"></canvas>
 
     <script>
-        /**
-         * CONFIGURATION
-         */
-        const CONFIG = {
-            particleCount: 40000, 
-            text1: "I",
-            text2: "LOVE",
-            text3: "YOU",
-            text4: "I LOVE YOU",
-            particleSize: 0.08, 
-            scatterRadius: 35,
-            textScale: 0.055,
-            camZ: 40,
-            interactionRadius: 8.0, 
-            repulsionStrength: 8.0 
-        };
+        // ==========================================
+        // 1. RESOURCES CONFIG Vandiep
+        // ==========================================
+        const MUSIC_URL = "./audio.mp3";
+        let bgMusic = new Audio(MUSIC_URL);
+        bgMusic.loop = true; bgMusic.volume = 1.0;
 
-        /**
-         * STATE MANAGEMENT
-         */
-        const state = {
-            targetGestureLabel: "Waiting...",
-            currentWeights: [0, 0, 0, 0, 0], 
-            targetWeights: [0, 0, 0, 0, 0],
-            
-            spreadTarget: 1.0, 
-            currentSpread: 1.0, 
-            
-            scatterScaleTarget: 1.0, 
-            currentScatterScale: 1.0,
+        const loader = new THREE.TextureLoader();
+        const photoFiles = ['./image1.jpg', './image2.jpg', './image3.jpg', './image4.jpg', './image5.jpg'];
+        const photoTextures = [];
+        photoFiles.forEach((f, i) => photoTextures[i] = loader.load(f));
 
-            fingerCount: 0,
-            galaxyEffectActive: false, 
-            
-            voiceModeActive: false,
-            wasVoiceModeActive: false,
-            voiceEnabledByUser: false, 
-
-            // Rotation Logic
-            handPositionRaw: { x: 0.5, y: 0.5 },
-            
-            // Interaction Physics Logic
-            handPositions: [], 
-            isHandDetected: false
-        };
-
-        /**
-         * UI INTERACTION LOGIC (Collapse & Drag)
-         */
-        
-        // 1. Collapse UI
-        const btnCollapse = document.getElementById('btn-collapse');
-        const uiLayer = document.getElementById('ui-layer');
-        btnCollapse.addEventListener('click', () => {
-            uiLayer.classList.toggle('collapsed');
-            btnCollapse.innerText = uiLayer.classList.contains('collapsed') ? '+' : '−';
-        });
-
-        // 2. Drag Camera
-        const camWrapper = document.getElementById('camera-wrapper');
-        const camHandle = document.getElementById('camera-handle');
-        let isDragging = false;
-        let dragOffset = { x: 0, y: 0 };
-
-        camHandle.addEventListener('mousedown', (e) => {
-            if (state.voiceModeActive) return; // Disable drag in full screen
-            isDragging = true;
-            const rect = camWrapper.getBoundingClientRect();
-            dragOffset.x = e.clientX - rect.left;
-            dragOffset.y = e.clientY - rect.top;
-            
-            // Switch from bottom/right positioning to top/left for dragging logic
-            camWrapper.style.bottom = 'auto';
-            camWrapper.style.right = 'auto';
-            camWrapper.style.left = rect.left + 'px';
-            camWrapper.style.top = rect.top + 'px';
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (isDragging) {
-                camWrapper.style.left = (e.clientX - dragOffset.x) + 'px';
-                camWrapper.style.top = (e.clientY - dragOffset.y) + 'px';
-            }
-        });
-
-        window.addEventListener('mouseup', () => {
-            isDragging = false;
-        });
-
-
-        /**
-         * THREE.JS SETUP
-         */
-        const container = document.getElementById('canvas-container');
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050505);
-        scene.fog = new THREE.FogExp2(0x050505, 0.012);
-
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = CONFIG.camZ;
-
-        const vFOV = THREE.MathUtils.degToRad(camera.fov);
-        const heightAtZero = 2 * Math.tan(vFOV / 2) * camera.position.z;
-        const widthAtZero = heightAtZero * camera.aspect;
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        container.appendChild(renderer.domElement);
-
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.autoRotate = false; 
-        controls.enableZoom = false;
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        /**
-         * PARTICLE SYSTEM & TEXT GENERATION
-         */
-        
-        // Dynamic Text Generator (Reuse for Voice)
-        function generateTextCoordinates(text, step = 2, scaleOverride = null) {
-            console.log(`Generating text coords for: "${text}"`);
+        function createCustomTexture(type) {
             const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
             const ctx = canvas.getContext('2d');
-            const width = 3000; 
-            const height = 800;
-            canvas.width = width;
-            canvas.height = height;
+            const cx = 64, cy = 64;
 
-            ctx.fillStyle = 'black';
-            ctx.fillRect(0, 0, width, height);
-            ctx.fillStyle = 'white';
-            ctx.font = '900 250px Arial, sans-serif'; // Simplified font
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(text, width / 2, height / 2);
+            if (type === 'gold_glow') {
+                // teal / aquamarine glow for tree (replaces gold)
+                const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, 40);
+                grd.addColorStop(0, '#E0FFFF');
+                grd.addColorStop(0.2, '#40E0D0');
+                grd.addColorStop(0.5, '#20B2AA');
+                grd.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = grd; ctx.fillRect(0,0,128,128);
 
-            const imageData = ctx.getImageData(0, 0, width, height);
-            const data = imageData.data;
-            const coords = [];
+            } else if (type === 'red_light') {
+                // blue glow for tree (replaces red)
+                const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, 50);
+                grd.addColorStop(0, '#DDEEFF');
+                grd.addColorStop(0.3, '#1E90FF');
+                grd.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = grd; ctx.fillRect(0,0,128,128);
 
-            const finalScale = scaleOverride || CONFIG.textScale;
-
-            for (let y = 0; y < height; y += step) { 
-                for (let x = 0; x < width; x += step) {
-                    const i = (y * width + x) * 4;
-                    if (data[i] > 128) {
-                        const pX = (x - width / 2) * finalScale;
-                        const pY = -(y - height / 2) * finalScale;
-                        coords.push(new THREE.Vector3(pX, pY, 0));
-                    }
-                }
+            } else if (type === 'gift_red') {
+                // gift styled with blue/teal accents
+                ctx.fillStyle = '#1E90FF'; ctx.fillRect(20, 20, 88, 88);
+                ctx.fillStyle = '#20B2AA'; ctx.fillRect(54, 20, 20, 88); ctx.fillRect(20, 54, 88, 20);
+                ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth=2; ctx.strokeRect(20,20,88,88);
             }
-            console.log(`Generated ${coords.length} points for "${text}"`);
-            return coords;
+            return new THREE.CanvasTexture(canvas);
         }
 
-        const coordsText1 = generateTextCoordinates(CONFIG.text1, 3); 
-        const coordsText2 = generateTextCoordinates(CONFIG.text2, 3);
-        const coordsText3 = generateTextCoordinates(CONFIG.text3, 3);
-        const coordsText4 = generateTextCoordinates(CONFIG.text4, 3); 
-        let coordsText5 = generateTextCoordinates("HELLO", 2); 
+        const textures = {
+            gold: createCustomTexture('gold_glow'),
+            red: createCustomTexture('red_light'),
+            gift: createCustomTexture('gift_red')
+        };
 
-        const particleGeometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(CONFIG.particleCount * 3);
-        const colors = new Float32Array(CONFIG.particleCount * 3);
+        // ==========================================
+        // 2. SYSTEM CONFIG Vandiep
+        // ==========================================
+        const CONFIG = {
+            goldCount: 2000,
+            redCount: 300,
+            giftCount: 150,
+            explodeRadius: 65,  
+            photoOrbitRadius: 25,
+            treeHeight: 70,
+            treeBaseRadius: 35
+        };
+
+        let scene, camera, renderer;
+        let groupGold, groupRed, groupGift; 
+        let photoMeshes = [];    
+        let titleMesh, starMesh, loveMesh;
         
-        const posScatter = [];
-        const posText1 = [];
-        const posText2 = [];
-        const posText3 = [];
-        const posText4 = [];
-        const posText5 = [];
+        let state = 'TREE'; 
+        let selectedIndex = 0;
+        let handX = 0.5;
 
-        function fillPosArray(targetArray, sourceCoords) {
-            targetArray.length = 0; 
-            const depth = 2.0;
-            const noise = 0.2;
-            for (let i = 0; i < CONFIG.particleCount; i++) {
-                if (sourceCoords.length === 0) {
-                     targetArray.push(new THREE.Vector3(0,0,0));
-                     continue;
-                }
-                const index = Math.floor(Math.random() * sourceCoords.length);
-                const p = sourceCoords[index];
-                targetArray.push(new THREE.Vector3(
-                    p.x + (Math.random() - 0.5) * noise,
-                    p.y + (Math.random() - 0.5) * noise,
-                    p.z + (Math.random() - 0.5) * depth
-                ));
-            }
+        // ==========================================
+        // 3. THREE.JS SYSTEM Vandiep
+        // ==========================================
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.002);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.position.z = 100;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            groupGold = createParticleSystem('gold', CONFIG.goldCount, 2.0);
+            groupRed = createParticleSystem('red', CONFIG.redCount, 3.5); 
+            groupGift = createParticleSystem('gift', CONFIG.giftCount, 3.0); 
+
+            createPhotos();
+            createDecorations();
+            animate();
         }
 
-        for (let i = 0; i < CONFIG.particleCount; i++) {
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos(Math.random() * 2 - 1);
-            const r = Math.cbrt(Math.random()) * CONFIG.scatterRadius; 
-            const x = r * Math.sin(phi) * Math.cos(theta);
-            const y = r * Math.sin(phi) * Math.sin(theta);
-            const z = r * Math.cos(phi);
-            positions[i * 3] = x;
-            positions[i * 3 + 1] = y;
-            positions[i * 3 + 2] = z;
-            colors[i * 3] = 1; colors[i * 3 + 1] = 1; colors[i * 3 + 2] = 1;
-            posScatter.push(new THREE.Vector3(x, y, z));
-        }
-
-        fillPosArray(posText1, coordsText1);
-        fillPosArray(posText2, coordsText2);
-        fillPosArray(posText3, coordsText3);
-        fillPosArray(posText4, coordsText4);
-        fillPosArray(posText5, coordsText5); 
-
-        particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        particleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-        const particleMaterial = new THREE.PointsMaterial({
-            vertexColors: true,
-            size: CONFIG.particleSize,
-            transparent: true,
-            opacity: 0.9,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            sizeAttenuation: true
-        });
-
-        const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
-        scene.add(particleSystem);
-
-        function updateDynamicText(text) {
-            const length = Math.max(text.length, 3);
-            let optimalScale = 0.09; 
-            if (length > 4) {
-                optimalScale = 0.4 / length; 
-            }
-            optimalScale = Math.max(0.035, optimalScale);
-
-            const newCoords = generateTextCoordinates(text, 2, optimalScale);
-            fillPosArray(posText5, newCoords);
-        }
-
-        /**
-         * SYSTEM 3: Galaxy Background 
-         */
-        const galaxyCount = 8000; 
-        const galaxyGeo = new THREE.BufferGeometry();
-        const galaxyPos = new Float32Array(galaxyCount * 3);
-        const galaxyColors = new Float32Array(galaxyCount * 3);
-        
-        for(let i=0; i<galaxyCount; i++) {
-            const r = 20 + Math.random() * 60; 
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos(Math.random() * 2 - 1);
+        function createParticleSystem(type, count, size) {
+            const pPositions = [];
+            const pExplodeTargets = [];
+            const pTreeTargets = [];
+            const pHeartTargets = [];
+            const sizes = []; 
+            const phases = []; 
             
-            galaxyPos[i*3] = r * Math.sin(phi) * Math.cos(theta);
-            galaxyPos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
-            galaxyPos[i*3+2] = r * Math.cos(phi);
+            for(let i=0; i<count; i++) {
+                // --- TREE Vandiep ---
+                const h = Math.random() * CONFIG.treeHeight; 
+                const y = h - CONFIG.treeHeight / 2;
+                let radiusRatio = (type === 'gold') ? Math.sqrt(Math.random()) : 0.9 + Math.random()*0.1;
+                const maxR = (1 - (h / CONFIG.treeHeight)) * CONFIG.treeBaseRadius;
+                const r = maxR * radiusRatio; 
+                const theta = Math.random() * Math.PI * 2;
+                pTreeTargets.push(r * Math.cos(theta), y, r * Math.sin(theta));
 
-            const c = new THREE.Color();
-            const rand = Math.random();
-            if(rand < 0.3) c.setHex(0x00ffff); 
-            else if (rand < 0.6) c.setHex(0x0000ff); 
-            else if (rand < 0.8) c.setHex(0x4b0082); 
-            else c.setHex(0xffffff); 
+                // --- EXPLODE Vandiep ---
+                const u = Math.random();
+                const v = Math.random();
+                const phi = Math.acos(2 * v - 1);
+                const lam = 2 * Math.PI * u;
+                let radMult = (type === 'gift') ? 1.2 : 1.0;
+                const rad = CONFIG.explodeRadius * Math.cbrt(Math.random()) * radMult;
+                pExplodeTargets.push(rad * Math.sin(phi) * Math.cos(lam), rad * Math.sin(phi) * Math.sin(lam), rad * Math.cos(phi));
 
-            c.multiplyScalar(0.5 + Math.random() * 0.5);
+                // --- SOFT HEART Vandiep ---
+                const tHeart = Math.random() * Math.PI * 2;
+                let hx = 16 * Math.pow(Math.sin(tHeart), 3);
+                let hy = 13 * Math.cos(tHeart) - 5 * Math.cos(2*tHeart) - 2 * Math.cos(3*tHeart) - Math.cos(4*tHeart);
+                
+                const rFill = Math.pow(Math.random(), 0.3); // Soft fill Vandiep
+                hx *= rFill; hy *= rFill;
+                let hz = (Math.random() - 0.5) * 8 * rFill; 
+                
+                const noise = 1.0;
+                hx += (Math.random() - 0.5) * noise;
+                hy += (Math.random() - 0.5) * noise;
+                hz += (Math.random() - 0.5) * noise;
 
-            galaxyColors[i*3] = c.r;
-            galaxyColors[i*3+1] = c.g;
-            galaxyColors[i*3+2] = c.b;
-        }
-        
-        galaxyGeo.setAttribute('position', new THREE.BufferAttribute(galaxyPos, 3));
-        galaxyGeo.setAttribute('color', new THREE.BufferAttribute(galaxyColors, 3));
-        
-        const galaxyMaterial = new THREE.PointsMaterial({
-            vertexColors: true,
-            size: 0.04, 
-            transparent: true,
-            opacity: 0, 
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
-        });
-        
-        const galaxySystem = new THREE.Points(galaxyGeo, galaxyMaterial);
-        scene.add(galaxySystem);
+                const scaleH = 2.2;
+                pHeartTargets.push(hx * scaleH, hy * scaleH + 5, hz); 
 
+                // --- INIT Vandiep ---
+                pPositions.push(pTreeTargets[i*3], pTreeTargets[i*3+1], pTreeTargets[i*3+2]);
+                sizes.push(size);
+                phases.push(Math.random() * Math.PI * 2);
+            }
 
-        /**
-         * VOICE RECOGNITION
-         */
-        const voiceBtn = document.getElementById('btn-voice');
-        const voiceIndicator = document.getElementById('voice-indicator');
-        const voiceBtnText = document.getElementById('voice-btn-text');
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pPositions, 3));
+            geo.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+            
+            // Init colors Vandiep
+            const colors = new Float32Array(count * 3);
+            const baseColor = new THREE.Color();
+            // change tree colors: gold -> teal, red -> blue
+            if(type === 'gold') baseColor.setHex(0x20B2AA);
+            else if(type === 'red') baseColor.setHex(0x1E90FF);
+            else baseColor.setHex(0xFFFFFF);
 
-        let recognition = null;
-
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
-
-            recognition.onstart = () => {
-                console.log("Voice recognition started");
-                voiceIndicator.classList.add('listening');
-                voiceBtnText.innerText = "Voice Mode: ON";
-                voiceBtn.classList.add('active');
+            for(let i=0; i<count; i++) {
+                colors[i*3] = baseColor.r;
+                colors[i*3+1] = baseColor.g;
+                colors[i*3+2] = baseColor.b;
+            }
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            geo.userData = { 
+                tree: pTreeTargets, explode: pExplodeTargets, heart: pHeartTargets, 
+                phases: phases, baseColor: baseColor, baseSize: size
             };
 
-            recognition.onerror = (event) => {
-                console.error("Voice recognition error", event.error);
-                if (event.error === 'not-allowed') {
-                    alert("Microphone access denied. Please allow microphone access.");
-                    state.voiceEnabledByUser = false;
-                }
-                voiceIndicator.classList.remove('listening');
-            };
-
-            recognition.onend = () => {
-                console.log("Voice recognition ended");
-                voiceIndicator.classList.remove('listening');
-                if (state.voiceEnabledByUser) {
-                    // Add a small delay before restarting to avoid rapid loops
-                    setTimeout(() => {
-                        try { recognition.start(); } catch(e) { console.warn("Restart failed", e); }
-                    }, 300);
-                } else {
-                    voiceBtnText.innerText = "Enable Voice Mode";
-                    voiceBtn.classList.remove('active');
-                }
-            };
-
-            recognition.onresult = (event) => {
-                if (!state.voiceEnabledByUser) return;
-
-                const last = event.results.length - 1;
-                const transcript = event.results[last][0].transcript.trim().toUpperCase();
-                
-                const words = transcript.split(' ');
-                const displayPhrase = words.slice(-3).join(' ');
-
-                if (displayPhrase.length > 0) {
-                    updateDynamicText(displayPhrase);
-                    state.targetGestureLabel = "Voice: " + displayPhrase;
-                    state.targetWeights = [0, 0, 0, 0, 1];
-                    state.spreadTarget = 0.0; 
-                }
-            };
-        } else {
-            voiceBtnText.innerText = "Voice Not Supported";
-            voiceBtn.disabled = true;
-        }
-
-        voiceBtn.addEventListener('click', () => {
-            if (!recognition) return;
-
-            state.voiceEnabledByUser = !state.voiceEnabledByUser;
-            
-            if (state.voiceEnabledByUser) {
-                try {
-                    recognition.start();
-                    state.voiceModeActive = true;
-                    state.targetGestureLabel = "Listening...";
-                    state.spreadTarget = 0.0; 
-                    state.targetWeights = [0, 0, 0, 0, 1]; 
-                    
-                    updateDynamicText("HELLO");
-                } catch(e) { console.warn(e); }
-            } else {
-                recognition.stop();
-                state.voiceModeActive = false;
-                state.targetGestureLabel = "Voice Mode OFF";
-                state.spreadTarget = 1.0;
-            }
-        });
-
-
-        /**
-         * HAND TRACKING & INTERACTION
-         */
-        const videoElement = document.getElementById('webcam-preview');
-        const uiGesture = document.getElementById('gesture-val');
-        const uiFingers = document.getElementById('finger-val');
-        const loading = document.getElementById('loading');
-
-        function onResults(results) {
-            loading.style.display = 'none';
-
-            let detectedGesture = 0; 
-            let fCount = 0;
-            let openness = 1.0;
-
-            state.handPositions = []; 
-
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                state.isHandDetected = true;
-                
-                for (const landmarks of results.multiHandLandmarks) {
-                    const palmX = 1.0 - landmarks[9].x; 
-                    const palmY = landmarks[9].y;
-                    const hPos = new THREE.Vector3(
-                        (palmX - 0.5) * widthAtZero,
-                        -(palmY - 0.5) * heightAtZero,
-                        0
-                    );
-                    state.handPositions.push(hPos);
-                }
-
-                const landmarks = results.multiHandLandmarks[0];
-                const handedness = results.multiHandedness[0].label;
-                
-                const wrist = landmarks[0];
-                state.handPositionRaw.x = 1.0 - wrist.x; 
-                state.handPositionRaw.y = wrist.y;
-
-                fCount = countFingers(landmarks, handedness);
-                openness = getHandOpenness(landmarks);
-
-                if (state.voiceEnabledByUser) {
-                    state.targetWeights = [0, 0, 0, 0, 1];
-                    state.spreadTarget = 0.0; 
-                    state.galaxyEffectActive = false; 
-                } else {
-                    if (fCount === 1) detectedGesture = 1;
-                    else if (fCount === 2) detectedGesture = 2;
-                    else if (fCount === 3) detectedGesture = 3;
-                    else if (fCount === 4) detectedGesture = 4;
-
-                    if (detectedGesture > 0) {
-                        state.targetGestureLabel = getLabel(detectedGesture);
-                        state.spreadTarget = 0.0;
-                        state.targetWeights = getWeights(detectedGesture);
-                        state.galaxyEffectActive = (detectedGesture === 4);
-                    } else {
-                        state.targetGestureLabel = fCount === 0 ? "Fist (Contract)" : "Scatter (Expand)";
-                        state.spreadTarget = 1.0;
-                        state.galaxyEffectActive = false;
-                        const minScale = 0.1;
-                        const maxScale = 1.5;
-                        state.scatterScaleTarget = minScale + openness * (maxScale - minScale);
-                    }
-                }
-
-                state.fingerCount = fCount;
-
-            } else {
-                state.isHandDetected = false;
-
-                if (state.voiceEnabledByUser) {
-                    state.spreadTarget = 0.0;
-                    state.targetWeights = [0, 0, 0, 0, 1];
-                    state.handPositionRaw.x = 0.5;
-                    state.handPositionRaw.y = 0.5;
-                } else {
-                    state.spreadTarget = 1.0;
-                    state.targetGestureLabel = "Waiting...";
-                    state.scatterScaleTarget = 1.0;
-                    state.handPositionRaw.x = 0.5;
-                    state.handPositionRaw.y = 0.5;
-                }
-                
-                state.fingerCount = 0;
-                state.galaxyEffectActive = false;
-            }
-
-            updateUI();
-        }
-
-        function getLabel(g) {
-            if(g===1) return CONFIG.text1;
-            if(g===2) return CONFIG.text2;
-            if(g===3) return CONFIG.text3;
-            if(g===4) return "I LOVE YOU";
-            return "";
-        }
-
-        function getWeights(g) {
-            if(g===1) return [1,0,0,0,0];
-            if(g===2) return [0,1,0,0,0];
-            if(g===3) return [0,0,1,0,0];
-            if(g===4) return [0,0,0,1,0];
-            return state.targetWeights; 
-        }
-
-        function getHandOpenness(landmarks) {
-            const wrist = landmarks[0];
-            const tips = [8, 12, 16, 20];
-            const mcps = [5, 9, 13, 17];
-            let distTips = 0, distMcps = 0;
-            for(let i=0; i<4; i++){
-                distTips += Math.hypot(landmarks[tips[i]].x - wrist.x, landmarks[tips[i]].y - wrist.y);
-                distMcps += Math.hypot(landmarks[mcps[i]].x - wrist.x, landmarks[mcps[i]].y - wrist.y);
-            }
-            const ratio = distTips / distMcps;
-            return Math.max(0, Math.min(1, (ratio - 1.0) / 1.2));
-        }
-
-        function countFingers(landmarks, handedness) {
-            let count = 0;
-            const fingerTips = [8, 12, 16, 20];
-            const fingerPips = [6, 10, 14, 18];
-            for (let i = 0; i < 4; i++) {
-                if (landmarks[fingerTips[i]].y < landmarks[fingerPips[i]].y) count++;
-            }
-            const thumbTip = landmarks[4];
-            const thumbIp = landmarks[3];
-            const isRightHand = handedness === 'Right';
-            if (isRightHand) {
-                if (thumbTip.x < thumbIp.x) count++;
-            } else {
-                if (thumbTip.x > thumbIp.x) count++;
-            }
-            return count;
-        }
-
-        function updateUI() {
-            uiGesture.innerText = state.targetGestureLabel;
-            uiFingers.innerText = state.fingerCount;
-        }
-
-        const hands = new Hands({locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-        }});
-
-        hands.setOptions({
-            maxNumHands: 2, 
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
-        hands.onResults(onResults);
-
-        const cameraFeed = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({image: videoElement});
-            },
-            width: 1280,
-            height: 720
-        });
-        
-        async function startCamera() {
-            try {
-                loading.innerHTML = "Requesting Camera Access...";
-                // Check if browser supports getUserMedia
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error("Browser API 'navigator.mediaDevices.getUserMedia' not available");
-                }
-
-                // Explicitly request permission first to debug
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                // Stop the stream immediately, we just wanted to check permission/availability
-                stream.getTracks().forEach(track => track.stop());
-                
-                loading.innerHTML = "Starting MediaPipe Camera...";
-                await cameraFeed.start();
-            } catch (err) {
-                console.error("Camera Error:", err);
-                loading.innerHTML = `Camera not found (${err.name}).<br>Switching to <b>Mouse Interaction Mode</b>.`;
-                setTimeout(() => {
-                    loading.style.display = 'none';
-                    activateMouseMode();
-                }, 2500);
-            }
-        }
-
-        let isMouseMode = false;
-        function activateMouseMode() {
-            isMouseMode = true;
-            state.isHandDetected = true; // Always "detect" hand in mouse mode
-            
-            // Keep camera wrapper visible but indicate no signal
-            const camWrapper = document.getElementById('camera-wrapper');
-            camWrapper.style.display = 'flex'; // Ensure it's visible
-            camWrapper.style.justifyContent = 'center';
-            camWrapper.style.alignItems = 'center';
-            camWrapper.style.background = 'rgba(20, 20, 20, 0.8)';
-            camWrapper.style.border = '1px solid #444';
-            
-            const video = document.getElementById('webcam-preview');
-            video.style.opacity = '0.1'; // Dim the broken video element
-            
-            // Add a placeholder text if not exists
-            if (!document.getElementById('no-cam-msg')) {
-                const msg = document.createElement('div');
-                msg.id = 'no-cam-msg';
-                msg.innerHTML = "NO CAMERA<br>Mouse Mode";
-                msg.style.color = '#aaa';
-                msg.style.textAlign = 'center';
-                msg.style.fontSize = '12px';
-                msg.style.position = 'absolute';
-                camWrapper.appendChild(msg);
-            }
-            
-            // Add mouse listener for interaction
-            window.addEventListener('mousemove', (event) => {
-                // Map mouse to 3D world coordinates on z=0 plane
-                const vec = new THREE.Vector3();
-                const pos = new THREE.Vector3();
-                
-                vec.set(
-                    (event.clientX / window.innerWidth) * 2 - 1,
-                    -(event.clientY / window.innerHeight) * 2 + 1,
-                    0.5
-                );
-                
-                vec.unproject(camera);
-                vec.sub(camera.position).normalize();
-                
-                const distance = -camera.position.z / vec.z;
-                pos.copy(camera.position).add(vec.multiplyScalar(distance));
-                
-                state.handPositions = [pos];
-                
-                // Map mouse X to rotation
-                state.handPositionRaw.x = event.clientX / window.innerWidth;
-                state.handPositionRaw.y = event.clientY / window.innerHeight;
+            const mat = new THREE.PointsMaterial({
+                size: size,
+                map: textures[type],
+                transparent: true, opacity: 1.0,
+                vertexColors: true, 
+                blending: (type === 'gift') ? THREE.NormalBlending : THREE.AdditiveBlending, 
+                depthWrite: false,
+                sizeAttenuation: true
             });
 
-            // Add click listener to cycle gestures
-            let gestureIndex = 0;
-            window.addEventListener('click', () => {
-                if (state.voiceModeActive) return;
-                
-                gestureIndex = (gestureIndex + 1) % 5; // 0 to 4
-                const g = gestureIndex;
-                
-                if (g === 0) {
-                    state.targetGestureLabel = "Mouse Click: Scatter";
-                    state.spreadTarget = 1.0;
-                    state.galaxyEffectActive = false;
-                } else {
-                    state.targetGestureLabel = "Mouse Click: " + getLabel(g);
-                    state.spreadTarget = 0.0;
-                    state.targetWeights = getWeights(g);
-                    state.galaxyEffectActive = (g === 4);
-                }
-                updateUI();
-            });
-            
-            // Update UI instructions
-            const uiContent = document.getElementById('ui-content');
-            const helpText = uiContent.querySelector('div[style*="font-size: 11px"]');
-            if(helpText) {
-                helpText.innerHTML = `
-                    <b>Mouse Mode Active:</b><br>
-                    🖱️ Move mouse to interact<br>
-                    🖱️ Click to cycle gestures<br>
-                    (I -> LOVE -> YOU -> ...)<br>
-                    <br>
-                    <b>Voice Mode:</b><br>
-                    🎤 Still works if Mic is available
-                `;
+            const points = new THREE.Points(geo, mat);
+            scene.add(points);
+            return points;
+        }
+
+        function createPhotos() {
+            const geo = new THREE.PlaneGeometry(8, 8);
+            const borderGeo = new THREE.PlaneGeometry(9, 9); 
+            const borderMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF }); 
+
+            for(let i=0; i<5; i++) {
+                const mat = new THREE.MeshBasicMaterial({ map: photoTextures[i], side: THREE.DoubleSide });
+                const mesh = new THREE.Mesh(geo, mat);
+                const border = new THREE.Mesh(borderGeo, borderMat);
+                border.position.z = -0.1; 
+                mesh.add(border);
+                mesh.visible = false; mesh.scale.set(0,0,0);
+                scene.add(mesh);
+                photoMeshes.push(mesh);
             }
         }
 
-        startCamera();
+        function createDecorations() {
+            // MERRY CHRISTMAS Vandiep
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold italic 90px "Times New Roman"';
+            ctx.fillStyle = '#FFD700'; ctx.textAlign = 'center';
+            ctx.shadowColor = "#FF0000"; ctx.shadowBlur = 40; 
+            ctx.fillText("MERRY CHRISTMAS", 512, 130);
+            const tex = new THREE.CanvasTexture(canvas);
+            const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending });
+            titleMesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 15), mat);
+            titleMesh.position.set(0, 50, 0);
+            scene.add(titleMesh);
 
-        /**
-         * ANIMATION
-         */
+            // STAR Vandiep
+            const starCanvas = document.createElement('canvas');
+            starCanvas.width = 128; starCanvas.height = 128;
+            const sCtx = starCanvas.getContext('2d');
+            sCtx.fillStyle = "#FFFF00"; sCtx.shadowColor="#FFF"; sCtx.shadowBlur=20;
+            sCtx.beginPath();
+            const cx=64, cy=64, outer=50, inner=20;
+            for(let i=0; i<5; i++){
+                sCtx.lineTo(cx + Math.cos((18+i*72)/180*Math.PI)*outer, cy - Math.sin((18+i*72)/180*Math.PI)*outer);
+                sCtx.lineTo(cx + Math.cos((54+i*72)/180*Math.PI)*inner, cy - Math.sin((54+i*72)/180*Math.PI)*inner);
+            }
+            sCtx.closePath(); sCtx.fill();
+            const starTex = new THREE.CanvasTexture(starCanvas);
+            const starMat = new THREE.MeshBasicMaterial({ map: starTex, transparent: true, blending: THREE.AdditiveBlending });
+            starMesh = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), starMat);
+            starMesh.position.set(0, CONFIG.treeHeight/2 + 2, 0);
+            scene.add(starMesh);
+
+            // I LOVE YOU TEXT Vandiep
+            const loveCanvas = document.createElement('canvas');
+            loveCanvas.width = 1024; loveCanvas.height = 256;
+            const lCtx = loveCanvas.getContext('2d');
+            lCtx.font = 'bold 120px "Segoe UI", sans-serif';
+            lCtx.fillStyle = '#FF69B4'; lCtx.textAlign = 'center';
+            lCtx.shadowColor = "#FF1493"; lCtx.shadowBlur = 40; 
+            lCtx.fillText("yêu em bé cqn ❤️", 512, 130);
+            const loveTex = new THREE.CanvasTexture(loveCanvas);
+            const loveMat = new THREE.MeshBasicMaterial({ map: loveTex, transparent: true, blending: THREE.AdditiveBlending });
+            loveMesh = new THREE.Mesh(new THREE.PlaneGeometry(70, 18), loveMat);
+            loveMesh.position.set(0, 0, 20);
+            loveMesh.visible = false;
+            scene.add(loveMesh);
+        }
+
+        function updateParticleGroup(group, type, targetState, speed, handRotY, time) {
+            const positions = group.geometry.attributes.position.array;
+            const sizes = group.geometry.attributes.size.array;
+            const colors = group.geometry.attributes.color.array;
+            const phases = group.geometry.userData.phases;
+            const baseColor = group.geometry.userData.baseColor;
+            const baseSize = group.geometry.userData.baseSize;
+            
+            const targetKey = (targetState === 'TREE') ? 'tree' : (targetState === 'HEART' ? 'heart' : 'explode');
+            const targets = group.geometry.userData[(targetState === 'PHOTO') ? 'explode' : targetKey];
+
+            // 1. Vandiep
+            for(let i=0; i<positions.length; i++) {
+                positions[i] += (targets[i] - positions[i]) * speed;
+            }
+            group.geometry.attributes.position.needsUpdate = true;
+            
+            // 2. COLOR & SIZE Vandiep
+            const count = positions.length / 3;
+            
+            if (targetState === 'TREE') {
+                group.rotation.y += 0.003;
+                
+                for(let i=0; i<count; i++) {
+                    sizes[i] = baseSize;
+                    let brightness = 1.0;
+                    if(type === 'red') {
+                        // RED
+                        brightness = 0.5 + 0.5 * Math.sin(time * 3 + phases[i]);
+                    } else if(type === 'gold') {
+                        // YELLOW
+                        brightness = 0.8 + 0.4 * Math.sin(time * 10 + phases[i]);
+                    }
+                    colors[i*3]   = baseColor.r * brightness;
+                    colors[i*3+1] = baseColor.g * brightness;
+                    colors[i*3+2] = baseColor.b * brightness;
+                }
+                group.geometry.attributes.color.needsUpdate = true;
+                group.geometry.attributes.size.needsUpdate = true;
+
+            } else if (targetState === 'HEART') {
+                group.rotation.y = 0;
+                const beatScale = 1 + Math.abs(Math.sin(time * 3)) * 0.15;
+                group.scale.set(beatScale, beatScale, beatScale);
+
+                // Vandiep
+                for(let i=0; i<count; i++) {
+                    colors[i*3] = baseColor.r; colors[i*3+1] = baseColor.g; colors[i*3+2] = baseColor.b;
+                    if (i % 3 === 0) sizes[i] = baseSize;
+                    else sizes[i] = 0;
+                }
+                group.geometry.attributes.color.needsUpdate = true;
+                group.geometry.attributes.size.needsUpdate = true;
+
+            } else {
+                // EXPLODE
+                group.scale.set(1,1,1);
+                group.rotation.y += (handRotY - group.rotation.y) * 0.1;
+
+                // size, color
+                for(let i=0; i<count; i++) {
+                    sizes[i] = baseSize;
+                    let brightness = 1.0;
+                    if(type === 'gold' || type === 'red') {
+                        brightness = 0.8 + 0.5 * Math.sin(time * 12 + phases[i]);
+                    }
+                    colors[i*3]   = baseColor.r * brightness;
+                    colors[i*3+1] = baseColor.g * brightness;
+                    colors[i*3+2] = baseColor.b * brightness;
+                }
+                group.geometry.attributes.size.needsUpdate = true;
+                group.geometry.attributes.color.needsUpdate = true;
+            }
+        }
+
         function animate() {
             requestAnimationFrame(animate);
-
-            // Handle AR Mode Transition
-            if (state.voiceModeActive !== state.wasVoiceModeActive) {
-                if (state.voiceModeActive) {
-                    camWrapper.classList.add('fullscreen');
-                    // Only make background transparent if camera is actually working/visible
-                    if (!isMouseMode) {
-                        scene.background = null; 
-                    } else {
-                        scene.background = new THREE.Color(0x050505);
-                    }
-                    
-                    // Reset position when entering fullscreen to ensure it covers everything
-                    camWrapper.style.top = '';
-                    camWrapper.style.left = '';
-                    camWrapper.style.bottom = '';
-                    camWrapper.style.right = '';
-                } else {
-                    camWrapper.classList.remove('fullscreen');
-                    scene.background = new THREE.Color(0x050505);
-                    // Reset to default corner position or keep last dragged position? 
-                    // Let's reset for safety or keep it if dragged. 
-                    // Since we modified inline styles during drag, they persist.
-                    if (!camWrapper.style.top) {
-                        camWrapper.style.bottom = '15px';
-                        camWrapper.style.right = '15px';
-                    }
-                }
-                state.wasVoiceModeActive = state.voiceModeActive;
-            }
-
-            // Interpolators
-            state.currentSpread += (state.spreadTarget - state.currentSpread) * 0.08;
-            state.currentScatterScale += (state.scatterScaleTarget - state.currentScatterScale) * 0.1;
-            
-            for(let i=0; i<5; i++) { 
-                state.currentWeights[i] += (state.targetWeights[i] - state.currentWeights[i]) * 0.1;
-            }
-
-            // Hand Rotation 
-            const targetRotY = (state.handPositionRaw.x - 0.5) * 1.5; 
-            const targetRotX = (state.handPositionRaw.y - 0.5) * 1.5;
-            particleSystem.rotation.y += (targetRotY - particleSystem.rotation.y) * 0.1;
-            particleSystem.rotation.x += (targetRotX - particleSystem.rotation.x) * 0.1;
-            
-            // Rotate Galaxy (independent)
-            galaxySystem.rotation.y += 0.002;
-            galaxySystem.rotation.x += 0.001;
-
-            const positionsArray = particleGeometry.attributes.position.array;
-            const colorsArray = particleGeometry.attributes.color.array;
-
             const time = Date.now() * 0.001;
-            
-            const w1 = state.currentWeights[0]; 
-            const w2 = state.currentWeights[1]; 
-            const w3 = state.currentWeights[2]; 
-            const w4 = state.currentWeights[3]; 
-            const w5 = state.currentWeights[4]; 
+            const speed = 0.08;
+            const handRotY = (handX - 0.5) * 4.0;
 
-            const interactionRadSq = CONFIG.interactionRadius * CONFIG.interactionRadius;
-            
-            for (let i = 0; i < CONFIG.particleCount; i++) {
-                // 1. Calculate Target
-                const p1 = posText1[i];
-                const p2 = posText2[i];
-                const p3 = posText3[i];
-                const p4 = posText4[i];
-                const p5 = posText5[i]; // Dynamic Text
+            updateParticleGroup(groupGold, 'gold', state, speed, handRotY, time);
+            updateParticleGroup(groupRed, 'red', state, speed, handRotY, time);
+            updateParticleGroup(groupGift, 'gift', state, speed, handRotY, time);
 
-                const tx = p1.x*w1 + p2.x*w2 + p3.x*w3 + p4.x*w4 + p5.x*w5;
-                const ty = p1.y*w1 + p2.y*w2 + p3.y*w3 + p4.y*w4 + p5.y*w5;
-                const tz = p1.z*w1 + p2.z*w2 + p3.z*w3 + p4.z*w4 + p5.z*w5;
-
-                // 2. Scatter
-                const s = posScatter[i];
-                const sX = s.x * state.currentScatterScale;
-                const sY = s.y * state.currentScatterScale;
-                const sZ = s.z * state.currentScatterScale;
-                
-                const noiseScale = 0.5 * state.currentScatterScale;
-                const nX = Math.sin(time + i*0.1) * noiseScale;
-                const nY = Math.cos(time + i*0.13) * noiseScale;
-
-                // 3. Blend
-                let finalX = THREE.MathUtils.lerp(tx, sX + nX, state.currentSpread);
-                let finalY = THREE.MathUtils.lerp(ty, sY + nY, state.currentSpread);
-                let finalZ = THREE.MathUtils.lerp(tz, sZ, state.currentSpread);
-
-                // 4. Physics Interaction (Multi-Hand)
-                if (state.voiceModeActive && state.handPositions.length > 0) {
-                    for (const hPos of state.handPositions) {
-                        const dx = finalX - hPos.x;
-                        const dy = finalY - hPos.y;
-                        const dz = finalZ - hPos.z;
-                        const distSq = dx*dx + dy*dy + dz*dz;
-
-                        if (distSq < interactionRadSq) {
-                            const dist = Math.sqrt(distSq);
-                            const force = (CONFIG.interactionRadius - dist) / CONFIG.interactionRadius; 
-                            
-                            // Stronger repulsion logic
-                            const repulsion = Math.pow(force, 2) * CONFIG.repulsionStrength; 
-
-                            finalX += (dx / dist) * repulsion * 5; 
-                            finalY += (dy / dist) * repulsion * 5;
-                            finalZ += (dz / dist) * repulsion * 5;
-                        }
-                    }
+            photoMeshes.forEach((mesh, i) => {
+                if(!mesh.material.map && photoTextures[i]) {
+                    mesh.material.map = photoTextures[i]; mesh.material.needsUpdate = true;
                 }
+            });
 
-                // Update Position
-                const cx = positionsArray[i*3];
-                const cy = positionsArray[i*3+1];
-                const cz = positionsArray[i*3+2];
-                const speed = 0.1;
-                positionsArray[i*3]   += (finalX - cx) * speed;
-                positionsArray[i*3+1] += (finalY - cy) * speed;
-                positionsArray[i*3+2] += (finalZ - cz) * speed;
+            if (state === 'TREE') {
+                titleMesh.visible = true; starMesh.visible = true; loveMesh.visible = false;
+                titleMesh.scale.lerp(new THREE.Vector3(1,1,1), 0.1);
+                starMesh.rotation.z -= 0.02; 
+                starMesh.material.opacity = 0.7 + 0.3*Math.sin(time*5);
+                photoMeshes.forEach(m => { m.scale.lerp(new THREE.Vector3(0,0,0), 0.1); m.visible = false; });
 
-                // 5. Colors (UNIFIED & NEW AR COLOR)
-                const baseColor = new THREE.Color();
-                const cPink1 = new THREE.Color(0xff69b4); // HotPink
-                const cPurple = new THREE.Color(0xda70d6); // Orchid
-                const cBlueNeon = new THREE.Color(0x00ffff); // Cyan for AR
-                const cWhite = new THREE.Color(0xffffff);
+            } else if (state === 'HEART') {
+                titleMesh.visible = false; starMesh.visible = false; loveMesh.visible = true;
+                photoMeshes.forEach(m => { m.visible = false; });
+                const s = 1 + Math.abs(Math.sin(time*3))*0.1;
+                loveMesh.scale.set(s,s,1);
 
-                if (state.currentSpread > 0.8) {
-                    // Scatter Color
-                    const dist = Math.sqrt(finalX*finalX + finalY*finalY + finalZ*finalZ);
-                    const normDist = Math.min(dist / 40, 1);
-                    baseColor.setHSL(0.9, 0.5, 0.8 + normDist*0.2);
-                } else {
-                    if (w5 > 0.5) {
-                        // AR / Voice Mode -> BLUE NEON / High Contrast
-                        baseColor.copy(cBlueNeon);
-                        // Make it brighter/more contrasty
-                        baseColor.offsetHSL(0, 0, 0.1); 
-                        // Sparkle
-                        if (Math.random() > 0.92) baseColor.setHex(0xffffff);
-                    } else if (w1>0.5 || w2>0.5 || w3>0.5 || w4>0.5) {
-                        // All gestures now use the Unified Pink/Purple scheme (Love Theme)
-                        baseColor.lerpColors(cPink1, cPurple, 0.5);
-                        const hueOffset = (finalX / 60) * 0.1;
-                        baseColor.offsetHSL(hueOffset, 0, 0);
+            } else if (state === 'EXPLODE') {
+                titleMesh.visible = false; starMesh.visible = false; loveMesh.visible = false;
+                const baseAngle = groupGold.rotation.y; 
+                const angleStep = (Math.PI * 2) / 5;
+                let bestIdx = 0; let maxZ = -999;
+                photoMeshes.forEach((mesh, i) => {
+                    mesh.visible = true;
+                    const angle = baseAngle + i * angleStep;
+                    const x = Math.sin(angle) * CONFIG.photoOrbitRadius;
+                    const z = Math.cos(angle) * CONFIG.photoOrbitRadius;
+                    const y = Math.sin(time + i) * 3; 
+                    mesh.position.lerp(new THREE.Vector3(x, y, z), 0.1);
+                    mesh.lookAt(camera.position);
+                    if (z > maxZ) { maxZ = z; bestIdx = i; }
+                    if (z > 5) { 
+                        const ds = 1.0 + (z/CONFIG.photoOrbitRadius)*0.8; 
+                        mesh.scale.lerp(new THREE.Vector3(ds, ds, ds), 0.1);
                     } else {
-                        baseColor.setHex(0xffffff);
+                        mesh.scale.lerp(new THREE.Vector3(0.6, 0.6, 0.6), 0.1);
                     }
-                }
+                });
+                selectedIndex = bestIdx;
 
-                colorsArray[i*3] = baseColor.r;
-                colorsArray[i*3+1] = baseColor.g;
-                colorsArray[i*3+2] = baseColor.b;
+            } else if (state === 'PHOTO') {
+                loveMesh.visible = false;
+                photoMeshes.forEach((mesh, i) => {
+                    if (i === selectedIndex) {
+                        mesh.position.lerp(new THREE.Vector3(0, 0, 60), 0.1);
+                        mesh.scale.lerp(new THREE.Vector3(5, 5, 5), 0.1);
+                        mesh.lookAt(camera.position); mesh.rotation.z = 0;
+                    } else {
+                        mesh.scale.lerp(new THREE.Vector3(0,0,0), 0.1);
+                    }
+                });
             }
-
-            particleGeometry.attributes.position.needsUpdate = true;
-            particleGeometry.attributes.color.needsUpdate = true;
-
-            // Galaxy Animation (Opacity matches Gesture 4)
-            galaxyMaterial.opacity = THREE.MathUtils.lerp(galaxyMaterial.opacity, state.galaxyEffectActive ? 0.8 : 0.0, 0.03);
-
-            controls.update();
             renderer.render(scene, camera);
         }
 
-        animate();
+        function startSystem() {
+            document.getElementById('btnStart').style.display = 'none';
+            init3D();
 
+            const video = document.getElementsByClassName('input_video')[0];
+            const canvas = document.getElementById('camera-preview');
+            const ctx = canvas.getContext('2d');
+            
+            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+            hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+
+            hands.onResults(results => {
+                ctx.clearRect(0,0,100,75); ctx.drawImage(results.image, 0, 0, 100, 75);
+
+                // --- Hand Logic  ---
+                if (results.multiHandLandmarks.length === 2) {
+                    const h1 = results.multiHandLandmarks[0]; const h2 = results.multiHandLandmarks[1];
+                    const distIndex = Math.hypot(h1[8].x - h2[8].x, h1[8].y - h2[8].y);
+                    const distThumb = Math.hypot(h1[4].x - h2[4].x, h1[4].y - h2[4].y);
+                    if (distIndex < 0.15 && distThumb < 0.15) {
+                        state = 'HEART'; return;
+                    }
+                }
+
+                if(results.multiHandLandmarks.length > 0) {
+                    const lm = results.multiHandLandmarks[0];
+                    handX = lm[9].x; 
+                    const tips = [8,12,16,20]; const wrist = lm[0];
+                    let openDist = 0; tips.forEach(i => openDist += Math.hypot(lm[i].x-wrist.x, lm[i].y-wrist.y));
+                    const avgDist = openDist / 4;
+                    const pinchDist = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
+
+                    if (avgDist < 0.25) { 
+                        state = 'TREE'; 
+                    } else if (pinchDist < 0.05) {
+                        state = 'PHOTO'; 
+                    } else {
+                        state = 'EXPLODE'; 
+                    }
+                } else {
+                    state = 'TREE'; 
+                }
+            });
+
+            const cameraUtils = new Camera(video, {
+                onFrame: async () => { await hands.send({image: video}); }, width: 320, height: 240, facingMode: 'environment'
+            });
+
+            cameraUtils.start().then(() => {
+                // Camera started - start audio (user gesture already happened) and clear errors
+                bgMusic.play().catch(e => console.log(e));
+                const errEl = document.getElementById('error-log');
+                if (errEl) { errEl.style.display = 'none'; errEl.innerText = ''; }
+            }).catch(err => {
+                console.error('Camera start failed:', err);
+                const errEl = document.getElementById('error-log');
+                if (errEl) {
+                    errEl.style.display = 'block';
+                    errEl.innerText = 'Không thể truy cập camera: ' + (err && err.message ? err.message : err);
+                }
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            if(camera) { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+        });
     </script>
 </body>
 </html>
